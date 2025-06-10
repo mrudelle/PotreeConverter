@@ -356,5 +356,102 @@ CpuData getCpuData() {
 	return data;
 }
 
+#elif defined(__APPLE__)
+
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+#include <mach/vm_map.h>
+#include <mach/mach_init.h>
+#include <mach/task.h>
+#include <mach/host_info.h>
+#include <mach/mach_host.h>
+
+MemoryData getMemoryData() {
+    MemoryData data;
+    
+    // Get system memory info
+    vm_size_t page_size;
+    vm_statistics64_data_t vm_stat;
+    mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(natural_t);
+    
+    host_page_size(mach_host_self(), &page_size);
+    host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_size);
+    
+    uint64_t total_mem = (vm_stat.free_count + vm_stat.active_count + vm_stat.inactive_count + 
+                         vm_stat.wire_count + vm_stat.compressor_page_count) * page_size;
+    uint64_t used_mem = (vm_stat.active_count + vm_stat.inactive_count + 
+                        vm_stat.wire_count + vm_stat.compressor_page_count) * page_size;
+    
+    data.physical_total = total_mem;
+    data.physical_used = used_mem;
+    data.virtual_total = total_mem; // Simplified for macOS
+    data.virtual_used = used_mem;
+    
+    // Get process memory info
+    task_basic_info_data_t info;
+    mach_msg_type_number_t size = sizeof(info);
+    task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &size);
+    
+    static uint64_t virtualUsedMax = 0;
+    static uint64_t physicalUsedMax = 0;
+    
+    virtualUsedMax = std::max((uint64_t)info.virtual_size, virtualUsedMax);
+    physicalUsedMax = std::max((uint64_t)info.resident_size, physicalUsedMax);
+    
+    data.virtual_usedByProcess = info.virtual_size;
+    data.virtual_usedByProcess_max = virtualUsedMax;
+    data.physical_usedByProcess = info.resident_size;
+    data.physical_usedByProcess_max = physicalUsedMax;
+    
+    return data;
+}
+
+void printMemoryReport() {
+    auto memoryData = getMemoryData();
+    double vm = double(memoryData.virtual_usedByProcess) / (1024.0 * 1024.0 * 1024.0);
+    double pm = double(memoryData.physical_usedByProcess) / (1024.0 * 1024.0 * 1024.0);
+
+    stringstream ss;
+    ss << "memory usage: "
+        << "virtual: " << formatNumber(vm, 1) << " GB, "
+        << "physical: " << formatNumber(pm, 1) << " GB"
+        << endl;
+
+    cout << ss.str();
+}
+
+void launchMemoryChecker(int64_t maxMB, double checkInterval) {
+    auto interval = std::chrono::milliseconds(int64_t(checkInterval * 1000));
+
+    thread t([maxMB, interval]() {
+        while (true) {
+            auto memdata = getMemoryData();
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(interval);
+        }
+    });
+    t.detach();
+}
+
+static int numProcessors;
+static bool initialized = false;
+
+void init() {
+    numProcessors = std::thread::hardware_concurrency();
+    initialized = true;
+}
+
+CpuData getCpuData() {
+    if (!initialized) {
+        init();
+    }
+
+    CpuData data;
+    data.numProcessors = numProcessors;
+    data.usage = 0.0; // Simplified - CPU usage calculation is complex on macOS
+    
+    return data;
+}
 
 #endif

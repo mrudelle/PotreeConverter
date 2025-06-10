@@ -34,6 +34,14 @@ using std::chrono::high_resolution_clock;
 
 namespace fs = std::filesystem;
 
+#ifdef __APPLE__
+#define fseek_64_all_platforms fseeko
+#elif defined(_WIN32)
+#define fseek_64_all_platforms _fseeki64
+#else
+#define fseek_64_all_platforms fseeko64
+#endif
+
 static long long unsuck_start_time = high_resolution_clock::now().time_since_epoch().count();
 
 static double Infinity = std::numeric_limits<double>::infinity();

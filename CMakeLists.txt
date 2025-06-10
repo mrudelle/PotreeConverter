@@ -58,7 +58,7 @@ if (UNIX)
 	find_package(TBB REQUIRED)
 	
 	target_link_libraries(${PROJECT_NAME} Threads::Threads)
-	target_link_libraries(${PROJECT_NAME} tbb)
+	target_link_libraries(${PROJECT_NAME} TBB::tbb)
 
 
 	#SET(CMAKE_CXX_FLAGS "-pthread -ltbb")
